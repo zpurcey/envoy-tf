@@ -6,7 +6,21 @@ data "google_compute_image" "my_image" {
   project = "debian-cloud"
 }
 
-resource "google_compute_instance_template" "foobar" {
+# Create the Forwarding rule
+resource "google_compute_global_forwarding_rule" "adminweb_tcp_443_forwarding_rule" {
+  provider = google-beta
+  name = "adminweb-tcp-443-forwarding-rule"
+  depends_on            = [google_compute_target_tcp_proxy.adminweb_tcp_443_td_proxy_unit]
+  ip_protocol           = "TCP"
+  load_balancing_scheme = "INTERNAL_SELF_MANAGED"
+  port_range            = 443
+  target = google_compute_target_tcp_proxy.adminweb_tcp_443_td_proxy_unit.id
+  network      = "projects/apurcell-tf-cloud/global/networks/vpc-art-host"
+  ip_address   = "0.0.0.0"
+}
+
+# Create instance template for TD envoy proxy
+resource "google_compute_instance_template" "instance_template" {
   name           = "appserver-template"
   machine_type   = "e2-medium"
   can_ip_forward = false
@@ -19,12 +33,8 @@ resource "google_compute_instance_template" "foobar" {
   }
 
   network_interface {
-    network = "default"
-
-#  Uncomment if private google api access is not enabled on the VPC subnet
-#    access_config {
-#      // Ephemeral public IP
-#    }
+    network = "projects/apurcell-tf-cloud/global/networks/vpc-art-host"
+    subnetwork = "projects/apurcell-tf-cloud/regions/australia-southeast1/subnetworks/subnet-10-44-110-0-24-firewall" 
   }
 
   scheduling {
@@ -52,4 +62,20 @@ EOF
   labels = {
     gce-service-proxy = "on"
   }
+}
+
+# Create the Instance Group
+resource "google_compute_instance_group_manager" "Adminweb-tcp_443_traffic_director_instance_group-unit" {
+  name               = "adminweb-tcp443-td-middleproxy-instancegroup-unit"
+  base_instance_name = "adminweb-tcp443-td-middleproxy-instancegroup-unit"
+  target_size        = 1
+  version {
+    instance_template = google_compute_instance_template.instance_template.id
+  }
+  named_port {
+    name = "tcp443"
+    port = 443
+  }
+  #Ensure the Template has been created before creating the Instance Group and Instances.
+  depends_on = [google_compute_instance_template.instance_template]
 }

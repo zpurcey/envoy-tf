@@ -1,3 +1,16 @@
+# Create the healthcheck
+resource "google_compute_health_check" "tcp_port_443_healthcheck" {
+  name    = "tcp-443-health-check"
+
+  timeout_sec        = 1
+  check_interval_sec = 1
+
+  tcp_health_check {
+    port = "443"
+    port_specification = "USE_FIXED_PORT"
+  }
+}
+
 data "google_compute_default_service_account" "default" {
 }
 
